@@ -16,7 +16,7 @@
 
 | | | |
 |:---:|:---:|:---:|
-| <img src="./awards/hackfest-podium.jpg" width="240" /> | <img src="./awards/cash-prize-cheque.jpg" width="240" /> | <img src="./awards/hackfest-certificate.jpg" width="240" /> |
+| <img src="./awards/hackfest-podium.jpeg" width="240" /> | <img src="./awards/2nd-runner.jpeg" width="240" /> | <img src="./awards/hackfest-certificate.jpeg" width="240" /> |
 
 ---
 
