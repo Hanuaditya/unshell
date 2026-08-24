@@ -22,7 +22,7 @@ if os.environ.get("GEMINI_API_KEY"):
     genai.configure(api_key=os.environ["GEMINI_API_KEY"])
 
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 
 class ExtractedEntity(BaseModel):
