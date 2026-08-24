@@ -3,9 +3,11 @@
 
 > **Hackfest 2026 · Team technorev · NMAMIT**
 
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/AI%20Service-FastAPI-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
+[![Express](https://img.shields.io/badge/Middleware-Express.js-000000?style=flat-square&logo=express)](https://expressjs.com)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB?style=flat-square&logo=react)](https://react.dev)
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-4A90D9?style=flat-square)](https://langchain-ai.github.io/langgraph/)
+[![MongoDB](https://img.shields.io/badge/Database-MongoDB%20Atlas-47A248?style=flat-square&logo=mongodb)](https://mongodb.com)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python)](https://python.org)
 
 ---
@@ -26,9 +28,10 @@ Financial criminals don't walk through the front door. They hide behind **layers
 |---|---|
 | Analyst reads 50-page PDFs manually | Hyper-RAG pipeline extracts ownership automatically |
 | Circular loops missed by human eye | `nx.simple_cycles()` detects mathematically |
-| Nominee directors not flagged | Director density algorithm fires NOMINEE_PUPPET |
+| Nominee directors not flagged | Director density algorithm fires `NOMINEE_PUPPET` |
 | OFAC check done separately | Built-in fuzzy SDN match, score → 100 instantly |
 | No source evidence | Every claim links to exact PDF page + chunk |
+| SAR takes hours to draft | Gemini 2.5 Flash generates a full SAR in seconds |
 | Days of work | Under 10 seconds |
 
 ---
@@ -39,31 +42,28 @@ Financial criminals don't walk through the front door. They hide behind **layers
 
 ```mermaid
 flowchart TD
-    USER(["👤 Compliance Officer"]) -->|"CRN"| FETCH
+    USER(["👤 Compliance Officer"]) -->|"CRN"| FE
 
-    FETCH["🏛️ fetch_uk_api
-    Companies House API
-    Officers · PSC · SIC · Filing PDFs"]
+    FE["🖥️ React + Vite Frontend\nhttp://localhost:5173"]
+    FE -->|"POST /api/investigate"| NODE
 
+    NODE["⚙️ Node.js / Express Middleware\nhttp://localhost:5000\nRouting · MongoDB Cache · History"]
+    NODE -->|"Cache miss → forward CRN"| FETCH
+
+    FETCH["🏛️ fetch_uk_api\nCompanies House API\nOfficers · PSC · SIC · Filing PDFs"]
     FETCH -->|"PDF Links"| RAG
 
     subgraph RAG ["🧠 Hyper-RAG Pipeline"]
         direction LR
-        R1["📥 R1 · PyMuPDF
-        Extract text + page ref"] -->
-        R2["🔢 R2 · FAISS Index
-        400-char chunks + embeddings"] -->
-        R3["🤖 R3 · NVIDIA Mistral
-        Semantic JSON extraction"] -->
-        R4["✅ R4 · RapidFuzz Firewall
-        Cross-verify · Drop hallucinations"]
+        R1["📥 R1 · PyMuPDF\nExtract text + page ref"] -->
+        R2["🔢 R2 · FAISS Index\n400-char chunks + embeddings"] -->
+        R3["🤖 R3 · NVIDIA Mistral\nSemantic JSON extraction"] -->
+        R4["✅ R4 · RapidFuzz Firewall\nCross-verify · Drop hallucinations"]
     end
 
     RAG --> NX
 
-    NX["📐 NetworkX Math Engine
-    calculate_risk_node"]
-
+    NX["📐 NetworkX Math Engine\ncalculate_risk_node"]
     NX --> CHECKS{"Risk Vectors"}
 
     CHECKS -->|"+15  Aged Shell"| SCORE
@@ -73,27 +73,24 @@ flowchart TD
     CHECKS -->|"FATAL  Nominee Puppet"| SCORE
 
     SCORE["🎯 Risk Score  0–100"]
-
     SCORE --> OR{"Offshore Dead-End?"}
 
-    OR -->|"Yes — no UBO found"| HITL["⏸️ HITL Pause
-    Freeze state · Amber screen
-    Upload offshore PDF → resume"]
+    OR -->|"Yes — no UBO found"| HITL["⏸️ HITL Pause\nFreeze state · Amber screen\nUpload offshore PDF → resume"]
     HITL -.->|"PDF uploaded"| RAG
 
-    OR -->|"No"| SC["🔍 sanctions_check
-    RapidFuzz on OFAC SDN SQLite"]
-
+    OR -->|"No"| SC["🔍 sanctions_check\nRapidFuzz on OFAC SDN SQLite"]
     SC --> T{"Score Threshold"}
 
     T -->|"0–64"| R2V["🟡 Human Review"]
     T -->|"65–94"| R3V["🔴 Auto Reject"]
     T -->|"95–100"| R4V["💀 SAR Filing"]
 
-    R2V & R3V & R4V --> UI["🖥️ React Flow UI
-    Ownership Graph · Risk Scoreboard · Evidence Panel"]
+    R2V & R3V & R4V --> MONGO["🗄️ MongoDB Atlas\nInvestigation History · SAR Drafts"]
+    MONGO --> UI["🖥️ React Flow UI\nOwnership Graph · Risk Scoreboard · Evidence Panel · SAR Modal"]
 
     style USER   fill:#1A237E,color:#fff,stroke:#5C6BC0
+    style FE     fill:#0D3B6E,color:#61DAFB,stroke:#38bdf8
+    style NODE   fill:#2d2d2d,color:#fff,stroke:#888
     style FETCH  fill:#1B5E20,color:#fff,stroke:#4CAF50
     style RAG    fill:transparent,stroke:#38bdf8,stroke-width:2px,color:#333
     style R1     fill:#0284c7,color:#fff,stroke:#38bdf8
@@ -110,6 +107,7 @@ flowchart TD
     style R2V    fill:#D69E2E,color:#fff,stroke:#B7791F
     style R3V    fill:#C53030,color:#fff,stroke:#9B2C2C
     style R4V    fill:#742A2A,color:#fff,stroke:#F56565
+    style MONGO  fill:#166534,color:#fff,stroke:#4ade80
     style UI     fill:#F2EFE9,color:#1A1729,stroke:#D6D2C4
 ```
 
@@ -238,11 +236,12 @@ The `NetworkX` graph engine runs **6 deterministic risk vectors** — pure math,
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | React 18 + Vite, React Flow (ownership graph), vanilla CSS |
-| **Backend** | FastAPI + asyncio, Uvicorn |
+| **Frontend** | React 19 + Vite 8, XYFlow / React Flow (ownership graph), Tailwind CSS |
+| **Middleware** | Node.js / Express 4, Mongoose, MongoDB Atlas (history & SAR cache) |
+| **AI Service** | FastAPI + asyncio, Uvicorn |
 | **Orchestration** | LangGraph (stateful 6-node workflow) |
 | **AI Extraction** | NVIDIA NIM Mistral (structured entity extraction) |
-| **PDF Reading** | Google Gemini 2.5 Flash (document mode) |
+| **PDF Reading** | Google Gemini 2.5 Flash (document mode, Hyper-RAG) |
 | **RAG Engine** | PyMuPDF + Sentence Transformers + FAISS |
 | **Verification** | RapidFuzz token-sort firewall (Zero-Trust AI) |
 | **Graph Math** | NetworkX (topology, cycle detection, centrality) |
@@ -255,33 +254,56 @@ The `NetworkX` graph engine runs **6 deterministic risk vectors** — pure math,
 
 ```
 unshell/
-├── backend/
-│   ├── main.py                  # FastAPI entry point
+├── node-backend/                    # Express.js middleware layer
+│   ├── server.js                    # Entry point — CORS, routes, MongoDB connect
+│   ├── config/
+│   │   └── db.js                    # Mongoose connection
+│   ├── controllers/
+│   │   └── investigateController.js # Business logic, same-day cache, SAR
+│   ├── models/
+│   │   └── Investigation.js         # Mongoose schema (history + SAR drafts)
+│   ├── routes/
+│   │   └── investigate.js           # /api/investigate, /api/history, /api/sar
+│   ├── services/
+│   │   └── aiServiceClient.js       # Axios proxy to Python AI service
+│   └── .env                         # PORT, MONGO_URI, AI_SERVICE_URL
+│
+├── ai-service/                      # Python FastAPI AI pipeline
+│   ├── main.py                      # FastAPI entry point (port 8001)
 │   ├── agent/
-│   │   ├── orchestrator.py      # LangGraph 6-node pipeline
-│   │   └── state.py             # InvestigationState TypedDict
+│   │   ├── orchestrator.py          # LangGraph 6-node pipeline
+│   │   ├── sar_generator.py         # Gemini 2.5 Flash SAR draft generator
+│   │   └── state.py                 # InvestigationState TypedDict
 │   ├── ai/
-│   │   ├── fetch_ch.py          # Companies House API client
-│   │   ├── ch_parser.py         # PSC/officer → graph node parser
-│   │   └── gemini_extractor.py  # Gemini PDF extraction (doc mode)
+│   │   ├── fetch_ch.py              # Companies House API client
+│   │   ├── ch_parser.py             # PSC/officer → graph node parser
+│   │   ├── gemini_extractor.py      # Gemini PDF extraction (doc mode)
+│   │   ├── gemini_normalizer.py     # Gemini output normalizer
+│   │   └── nvidia_normalizer.py     # NVIDIA NIM output normalizer
 │   ├── graph/
-│   │   └── engine.py            # NetworkX risk scoring engine
+│   │   └── engine.py                # NetworkX risk scoring engine
 │   ├── mcp/
-│   │   └── server.py            # FastMCP credential broker
+│   │   └── server.py                # FastMCP credential broker (port 8002)
 │   ├── data/
-│   │   └── sanctions.db         # OFAC SDN SQLite database
+│   │   └── sanctions.db             # OFAC SDN SQLite database
 │   └── requirements.txt
 │
-└── frontend/
+└── frontend/                        # React + Vite SPA
     └── src/
-        ├── App.jsx
-        ├── api/client.js        # Backend API calls
+        ├── App.jsx                  # Root — state machine & routing
+        ├── api/                     # Backend API calls
+        ├── constants/               # Shared design tokens
         └── components/
-            ├── DualEntryGateway.jsx   # Landing / CRN input
-            ├── LoadingScreen.jsx      # Investigation progress UI
-            ├── InvestigationView.jsx  # Main dashboard
-            ├── CustomNode.jsx         # React Flow graph node
-            └── RiskScoreboard.jsx     # Risk score bottom bar
+            ├── DualEntryGateway.jsx    # Landing page / CRN input
+            ├── LoadingScreen.jsx       # Live pipeline progress UI
+            ├── InvestigationView.jsx   # Main forensic dashboard
+            ├── GraphCanvas.jsx         # React Flow ownership graph
+            ├── CustomNode.jsx          # Graph node renderer
+            ├── EntitySidebar.jsx       # Entity list + stats sidebar
+            ├── EvidencePanel.jsx       # Source evidence drawer
+            ├── RiskScoreboard.jsx      # Risk score bottom bar
+            ├── HitlUploadZone.jsx      # HITL offshore PDF upload
+            └── SarDraftModal.jsx       # AI-generated SAR modal
 ```
 
 ---
@@ -291,39 +313,48 @@ unshell/
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
+- MongoDB Atlas account (free M0 cluster)
 - API keys (see below)
 
 ### 1. Clone & configure
 
 ```bash
-git clone https://github.com/hackfest-dev/HF26-26.git
-cd HF26-26
+git clone https://github.com/Hanuaditya/unshell.git
+cd unshell
 ```
 
-Create `backend/.env`:
-
+**`ai-service/.env`**
 ```env
 COMPANIES_HOUSE_API_KEY=your_key_here
 GEMINI_API_KEY=your_key_here
 NVIDIA_API_KEY=your_key_here
 ```
 
-### 2. Backend
+**`node-backend/.env`**
+```env
+PORT=5000
+MONGO_URI=your_mongodb_atlas_uri
+AI_SERVICE_URL=http://localhost:8001
+```
+
+### 2. Python AI Service (port 8001)
 
 ```bash
-cd backend
+cd ai-service
 pip install -r requirements.txt
-python -m uvicorn main:app --port 8001
+uvicorn main:app --reload --port 8001
 ```
 
-### 3. MCP Server (separate terminal)
+### 3. Node.js Middleware (port 5000)
 
 ```bash
-cd backend
-python mcp/server.py
+cd node-backend
+npm install
+npm run dev        # uses nodemon for hot-reload
+# or: npm start   # production
 ```
 
-### 4. Frontend
+### 4. Frontend (port 5173)
 
 ```bash
 cd frontend
@@ -345,10 +376,24 @@ Open **http://localhost:5173**
 
 ## API Reference
 
+### Node.js Middleware (`:5000`)
+
 | Endpoint | Method | Description |
 |---|---|---|
 | `/health` | GET | Service health check |
-| `/investigate` | POST | `{ "crn": "09446231" }` → full investigation |
+| `/api/investigate` | POST | `{ "crn": "09446231" }` → full investigation (cached same-day) |
+| `/api/investigate/sar` | POST | `{ "crn": "..." }` → generate SAR draft (score ≥ 65) |
+| `/api/history` | GET | Paginated investigation history (`?page=1&limit=10`) |
+| `/api/history/:crn` | GET | Full history for a specific CRN |
+
+### Python AI Service (`:8001`)
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | AI service health check |
+| `/investigate` | POST | `{ "crn": "..." }` → LangGraph pipeline result |
+| `/investigate/document` | POST | Multipart PDF upload → document mode investigation |
+| `/generate_sar` | POST | Structured payload → Gemini SAR draft |
 
 ---
 
@@ -359,6 +404,7 @@ Open **http://localhost:5173**
 | Companies House | [developer.company-information.service.gov.uk](https://developer.company-information.service.gov.uk) — free |
 | Gemini | [aistudio.google.com](https://aistudio.google.com) — free tier |
 | NVIDIA NIM | [build.nvidia.com](https://build.nvidia.com) — free credits |
+| MongoDB Atlas | [mongodb.com/atlas](https://www.mongodb.com/atlas) — free M0 cluster |
 
 ---
 

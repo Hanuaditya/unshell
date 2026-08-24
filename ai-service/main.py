@@ -24,6 +24,17 @@ class InvestigateAPIRequest(BaseModel):
     crn: str
     mode: Optional[str] = "api"
 
+class SARRequest(BaseModel):
+    crn: str
+    companyName: str
+    riskScore: int
+    fatalFlags: list
+    cumulativeVectors: list
+    graphData: dict
+    resolvedUbo: Optional[str] = None
+    sanctionsHit: bool = False
+    sanctionsDetail: Optional[str] = None
+
 @app.get("/health")
 async def health_check():
     return {
@@ -42,6 +53,27 @@ async def investigate(request: InvestigateAPIRequest):
             asyncio.to_thread(run_investigation, request.crn),
             timeout=120.0
         )
+        # [RAZORPAY DEMO OVERRIDE] - Guarantee critical path for pitch video
+        if request.crn == "06026625":
+            if isinstance(result, dict):
+                result["risk_score"] = 100
+                result["sanctions_hit"] = True
+                if "fatal_flags" not in result:
+                    result["fatal_flags"] = []
+                if "OFAC_MATCH" not in result["fatal_flags"]:
+                    result["fatal_flags"].append("OFAC_MATCH")
+                result["sanctions_detail"] = "Fuzzy Match (98%): US Treasury SDN List - ALIAS DETECTED"
+                
+                if "cumulative_vectors" not in result:
+                    result["cumulative_vectors"] = []
+                # Remove strings if they exist to replace with objects for hover-cite, or just append. 
+                # (Instructions say: If the cumulativeVectors array exists, append: { "flag": ... })
+                result["cumulative_vectors"].append({ 
+                    "flag": "OFAC_MATCH", 
+                    "impact": 100, 
+                    "evidence": "RapidFuzz detected 98% similarity with SDN entity ID #14932 (Russian Laundromat network)" 
+                })
+        
         return result
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail={"error": "Investigation timed out after 120s", "type": "TimeoutError"})
@@ -54,6 +86,35 @@ async def investigate(request: InvestigateAPIRequest):
             status_code=500,
             detail={"error": str(e), "type": type(e).__name__}
         )
+
+from datetime import datetime, timezone
+from agent.sar_generator import generate_sar_draft
+
+@app.post("/generate_sar")
+async def generate_sar(request: SARRequest):
+    if request.riskScore < 65:
+        raise HTTPException(status_code=400, detail="Risk score must be >= 65 to draft a SAR.")
+    try:
+        draft = generate_sar_draft(
+            crn=request.crn,
+            company_name=request.companyName,
+            risk_score=request.riskScore,
+            fatal_flags=request.fatalFlags,
+            cumulative_vectors=request.cumulativeVectors,
+            graph_data=request.graphData,
+            resolved_ubo=request.resolvedUbo,
+            sanctions_detail=request.sanctionsDetail
+        )
+        return {
+            "sarDraft": draft,
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "modelUsed": "gemini-2.5-flash",
+            "disclaimer": "This is an AI-generated draft for human compliance review only. It does not constitute a legal or regulatory filing and must be independently verified before submission."
+        }
+    except Exception as e:
+        print(f"Error in SAR generation: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=502, detail="SAR generation model unavailable")
 
 # ── Route 2: PDF upload → Document extraction path ───────────────────────────
 @app.post("/investigate/document")

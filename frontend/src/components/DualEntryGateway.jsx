@@ -94,7 +94,7 @@ function ErrorModal({ message, onClose }) {
 }
 
 /* ─── Main ───────────────────────────────────────────────────────────── */
-export default function DualEntryGateway({ onInvestigateAPI, error }) {
+export default function DualEntryGateway({ onInvestigateAPI, error, onErrorClear }) {
   const [crn, setCrn]         = useState('')
   const [modalErr, setMErr]   = useState(null)
   const [focused, setFocused] = useState(false)
@@ -130,7 +130,13 @@ export default function DualEntryGateway({ onInvestigateAPI, error }) {
         .feat-row:hover { opacity: 0.75; }
       `}</style>
 
-      <ErrorModal message={displayError} onClose={() => setMErr(null)} />
+      <ErrorModal 
+        message={displayError} 
+        onClose={() => {
+          setMErr(null)
+          if (onErrorClear) onErrorClear()
+        }} 
+      />
 
       {/* ── Top nav bar ──────────────────────────────────────────────── */}
       <nav style={{

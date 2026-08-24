@@ -13,6 +13,7 @@ export default function RiskScoreboard({
   sanctionsHit, sanctionsDetail, resolvedUbo,
   confidence = null,  // kept for API compat, not rendered
   compact = false,
+  onGenerateSar,
 }) {
   const color = getRiskColor(riskLabel)
   const banner = RISK_BANNER[riskLabel] || RISK_BANNER.MEDIUM_RISK
@@ -145,6 +146,31 @@ export default function RiskScoreboard({
           </div>
         )}
       </div>
+
+      {/* S5: SAR Button */}
+      {!compact && onGenerateSar && (
+        <div style={{
+          padding: '0 20px', borderLeft: '1px solid var(--border-light)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <button
+            onClick={onGenerateSar}
+            disabled={riskScore < 65}
+            title={riskScore < 65 ? "SAR drafting requires a risk score of 65 or higher." : "Generate a draft Suspicious Activity Report"}
+            style={{
+              background: riskScore >= 65 ? 'var(--text-dark)' : 'var(--cream-2)',
+              color: riskScore >= 65 ? 'var(--white)' : 'var(--text-muted)',
+              border: `1px solid ${riskScore >= 65 ? 'transparent' : 'var(--border-light)'}`,
+              fontSize: 12, fontWeight: 600, padding: '8px 16px', borderRadius: 6,
+              cursor: riskScore >= 65 ? 'pointer' : 'not-allowed',
+              transition: 'all 0.2s ease',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Pre-Draft SAR
+          </button>
+        </div>
+      )}
     </div>
   )
 }

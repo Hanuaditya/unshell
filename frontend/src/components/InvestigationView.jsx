@@ -3,6 +3,8 @@ import GraphCanvas from './GraphCanvas'
 import EvidencePanel from './EvidencePanel'
 import RiskScoreboard from './RiskScoreboard'
 import EntitySidebar from './EntitySidebar'
+import SarDraftModal from './SarDraftModal'
+import { generateSar } from '../api/client'
 
 // ─── MOCK DATA (removed) ──────────────────────────────────────────────────────
 
@@ -11,10 +13,29 @@ export default function InvestigationView({ data, crn = '', onReset = () => { },
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [activeFilters, setActiveFilters] = useState([])
 
+  const [sarModalOpen, setSarModalOpen] = useState(false)
+  const [sarDraft, setSarDraft] = useState(null)
+  const [sarLoading, setSarLoading] = useState(false)
+  const [sarError, setSarError] = useState(null)
+
   const fileInputRef = useRef(null)
 
   const targetName = data.graph?.nodes?.[0]?.label || data.resolved_ubo || 'Investigation'
   const panelWidth = selectedEdge ? 300 : 0
+
+  const handleGenerateSar = async () => {
+    setSarModalOpen(true)
+    setSarLoading(true)
+    setSarError(null)
+    try {
+      const res = await generateSar(crn)
+      setSarDraft(res.sarDraft)
+    } catch (err) {
+      setSarError(err.message)
+    } finally {
+      setSarLoading(false)
+    }
+  }
 
   return (
     <div style={{
@@ -221,6 +242,17 @@ export default function InvestigationView({ data, crn = '', onReset = () => { },
         sanctionsHit={data.sanctions_hit}
         sanctionsDetail={data.sanctions_detail}
         resolvedUbo={data.resolved_ubo}
+        onGenerateSar={handleGenerateSar}
+      />
+
+      <SarDraftModal 
+        open={sarModalOpen}
+        onClose={() => setSarModalOpen(false)}
+        sarDraft={sarDraft}
+        companyName={targetName}
+        crn={crn}
+        loading={sarLoading}
+        error={sarError}
       />
     </div>
   )

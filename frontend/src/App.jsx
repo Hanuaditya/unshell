@@ -34,7 +34,11 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh' }}>
       {screen === 'gateway' && (
-        <DualEntryGateway onInvestigateAPI={handleInvestigateAPI} error={error} />
+        <DualEntryGateway 
+          onInvestigateAPI={handleInvestigateAPI} 
+          error={error} 
+          onErrorClear={() => setError(null)}
+        />
       )}
       {screen === 'loading' && <LoadingScreen crn={lastCrn} />}
       {screen === 'results' && (
