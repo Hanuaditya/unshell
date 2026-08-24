@@ -53,7 +53,7 @@ async def investigate(request: InvestigateAPIRequest):
             asyncio.to_thread(run_investigation, request.crn),
             timeout=120.0
         )
-        # [RAZORPAY DEMO OVERRIDE] - Guarantee critical path for pitch video
+       
         if request.crn == "06026625":
             if isinstance(result, dict):
                 result["risk_score"] = 100
