@@ -12,6 +12,14 @@
 
 ---
 
+## 🏆 Awards
+
+| | | |
+|:---:|:---:|:---:|
+| <img src="./awards/hackfest-podium.jpg" width="240" /> | <img src="./awards/cash-prize-cheque.jpg" width="240" /> | <img src="./awards/hackfest-certificate.jpg" width="240" /> |
+
+---
+
 ## What is Project Unshell?
 
 Financial criminals don't walk through the front door. They hide behind **layers of shell companies, nominee directors, and offshore trusts** — making it nearly impossible for a compliance analyst to trace the real beneficial owner.
