@@ -91,7 +91,8 @@ async def fetch_uk_api(req: CRNRequest):
                     elif "50" in parts and "75" in parts: pct_val = 62.5
                     elif "75" in parts: pct_val = 87.5
                     else: pct_val = 0.0
-                except: pct_val = 0.0
+                except Exception:
+                    pct_val = 0.0
                 break
                 
         jurisdiction = item.get("address", {}).get("country", item.get("country_of_residence", ""))

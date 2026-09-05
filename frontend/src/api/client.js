@@ -5,7 +5,7 @@
 // The Node layer handles caching, MongoDB persistence, and AI proxying.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE = import.meta.env.VITE_API_BASE_URL;
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -23,8 +23,8 @@ async function apiFetch(path, options = {}) {
       if (body?.error) detail = body.error;
       else if (body?.detail?.error) detail = body.detail.error;
       else if (typeof body?.detail === "string") detail = body.detail;
-    } catch {
-      // body isn't JSON — keep the status-code message
+    } catch (parseErr) {
+      // Body is not JSON — keep the HTTP status-code message as the error detail
     }
     throw new Error(detail);
   }

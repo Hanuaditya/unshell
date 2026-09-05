@@ -10,6 +10,7 @@
 
 const Investigation = require("../models/Investigation");
 const { callInvestigateAPI, generateSar: callGenerateSarAPI } = require("../services/aiServiceClient");
+const localCache = require("../services/localCache");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,42 +71,71 @@ exports.postInvestigate = async (req, res) => {
     }
 
     const normalisedCRN = crn.trim().toUpperCase();
+    const isDbConnected = require("mongoose").connection.readyState === 1;
 
-    // 2. Same-day cache check
-    const cached = await Investigation.findOne({
-      crn: normalisedCRN,
-      timestamp: { $gte: todayMidnight() },
-    })
-      .sort({ timestamp: -1 })
-      .lean();
+    // 2a. MongoDB same-day cache check (if DB is connected)
+    if (isDbConnected) {
+      try {
+        const cached = await Investigation.findOne({
+          crn: normalisedCRN,
+          timestamp: { $gte: todayMidnight() },
+        })
+          .sort({ timestamp: -1 })
+          .lean();
 
-    if (cached) {
-      console.log(`[CACHE HIT] CRN ${normalisedCRN} — returning stored result.`);
+        if (cached) {
+          console.log(`[MONGO CACHE HIT] CRN ${normalisedCRN} — returning stored result.`);
+          return res.json({
+            ...cached.rawResult,
+            _cached: true,
+            _cacheSource: 'mongodb',
+            _cachedAt: cached.timestamp,
+          });
+        }
+      } catch (cacheErr) {
+        console.warn("[CACHE WARNING]", cacheErr.message);
+      }
+    }
+
+    // 2b. Local disk cache fallback (works even when MongoDB is unreachable)
+    const localHit = localCache.get(normalisedCRN)
+    if (localHit) {
       return res.json({
-        ...cached.rawResult,
+        ...localHit,
         _cached: true,
-        _cachedAt: cached.timestamp,
-      });
+        _cacheSource: 'local_disk',
+        _cachedAt: new Date().toISOString(),
+      })
     }
 
     // 3. Call the Python AI microservice
     console.log(`[PROXY] CRN ${normalisedCRN} — forwarding to AI service…`);
     const aiResult = await callInvestigateAPI(normalisedCRN);
 
-    // 4. Persist to MongoDB
-    const parsed = parseAIResult(aiResult);
-    const doc = await Investigation.create({
-      crn: normalisedCRN,
-      ...parsed,
-    });
+    // 4a. Persist to local disk cache (always — fastest & offline-safe)
+    localCache.set(normalisedCRN, aiResult)
 
-    console.log(`[SAVED] Investigation ${doc._id} for CRN ${normalisedCRN} saved to MongoDB.`);
+    // 4b. Persist to MongoDB (if DB is connected)
+    let savedId = null;
+    if (isDbConnected) {
+      try {
+        const parsed = parseAIResult(aiResult);
+        const doc = await Investigation.create({
+          crn: normalisedCRN,
+          ...parsed,
+        });
+        savedId = doc._id;
+        console.log(`[SAVED] Investigation ${doc._id} for CRN ${normalisedCRN} saved to MongoDB.`);
+      } catch (saveErr) {
+        console.warn("[SAVE WARNING]", saveErr.message);
+      }
+    }
 
     // 5. Return the original AI payload (plus internal metadata)
     return res.json({
       ...aiResult,
       _cached: false,
-      _savedId: doc._id,
+      _savedId: savedId,
     });
   } catch (err) {
     console.error("[investigateController.postInvestigate]", err.message);
@@ -139,6 +169,17 @@ exports.postInvestigate = async (req, res) => {
  */
 exports.getHistory = async (req, res) => {
   try {
+    const isDbConnected = require("mongoose").connection.readyState === 1;
+    if (!isDbConnected) {
+      return res.json({
+        investigations: [],
+        total: 0,
+        page: 1,
+        pages: 0,
+        warning: "MongoDB is not connected; history unavailable."
+      });
+    }
+
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
     const skip = (page - 1) * limit;
@@ -201,9 +242,40 @@ exports.generateSar = async (req, res) => {
       return res.status(400).json({ error: "CRN is required." });
     }
 
-    const investigation = await Investigation.findOne({ crn })
-      .sort({ timestamp: -1 })
-      .lean();
+    const isDbConnected = require("mongoose").connection.readyState === 1;
+
+    // ── Step 1: Find investigation (MongoDB first, then local disk cache) ──────
+    let investigation = null;
+
+    if (isDbConnected) {
+      investigation = await Investigation.findOne({ crn })
+        .sort({ timestamp: -1 })
+        .lean();
+    }
+
+    // Fallback: check local disk cache if not found in MongoDB
+    if (!investigation) {
+      const localHit = localCache.get(crn);
+      if (localHit) {
+        console.log(`[SAR] CRN ${crn} — not in MongoDB, found in local cache. Auto-saving to MongoDB...`);
+        if (isDbConnected) {
+          try {
+            // Persist the locally-cached result to MongoDB so SAR can be saved
+            const parsed = parseAIResult(localHit);
+            const doc = await Investigation.create({ crn, ...parsed });
+            investigation = await Investigation.findById(doc._id).lean();
+            console.log(`[SAR] Auto-saved investigation ${doc._id} for CRN ${crn} to MongoDB.`);
+          } catch (saveErr) {
+            console.warn(`[SAR] Auto-save to MongoDB failed: ${saveErr.message}`);
+            // Build a minimal investigation object so SAR generation can still proceed
+            investigation = { ...parseAIResult(localHit), crn, _id: null, rawResult: localHit };
+          }
+        } else {
+          // No DB — build a minimal object from local cache
+          investigation = { ...parseAIResult(localHit), crn, _id: null, rawResult: localHit };
+        }
+      }
+    }
 
     if (!investigation) {
       return res.status(404).json({ message: "No investigation found for this CRN. Run an investigation first." });
@@ -213,6 +285,7 @@ exports.generateSar = async (req, res) => {
       return res.status(403).json({ message: "SAR drafting is only available for high-risk investigations (score >= 65)." });
     }
 
+    // ── Step 2: Build payload and call AI service ─────────────────────────────
     const payload = {
       crn,
       companyName: investigation.companyName,
@@ -228,23 +301,38 @@ exports.generateSar = async (req, res) => {
     console.log(`[SAR] CRN ${crn} — generating draft...`);
     const aiResult = await callGenerateSarAPI(payload);
 
-    await Investigation.updateOne(
-      { _id: investigation._id },
-      {
-        $push: {
-          sarDrafts: {
-            text: aiResult.sarDraft,
-            generatedAt: new Date(aiResult.generatedAt),
-          },
-          sarAuditLog: {
-            requestedBy: "analyst",
-            promptSent: "System Prompt + Structured JSON Data",
-            draftReturned: aiResult.sarDraft,
-            timestamp: new Date(),
-          },
-        },
+    // ── Step 3: Persist SAR to MongoDB ────────────────────────────────────────
+    if (isDbConnected && investigation._id) {
+      try {
+        const mongoose = require("mongoose");
+        const updateResult = await Investigation.updateOne(
+          { _id: new mongoose.Types.ObjectId(investigation._id) },
+          {
+            $push: {
+              sarDrafts: {
+                text: aiResult.sarDraft,
+                generatedAt: new Date(aiResult.generatedAt),
+              },
+              sarAuditLog: {
+                requestedBy: "analyst",
+                promptSent: "System Prompt + Structured JSON Data",
+                draftReturned: aiResult.sarDraft,
+                timestamp: new Date(),
+              },
+            },
+          }
+        );
+        if (updateResult.modifiedCount === 1) {
+          console.log(`[SAR] ✅ SAR draft saved to MongoDB for CRN ${crn} (investigation ${investigation._id})`);
+        } else {
+          console.warn(`[SAR] ⚠️ updateOne matched ${updateResult.matchedCount} / modified ${updateResult.modifiedCount} — SAR may not have saved.`);
+        }
+      } catch (saveErr) {
+        console.error(`[SAR] ❌ Failed to save SAR to MongoDB: ${saveErr.message}`);
       }
-    );
+    } else {
+      console.warn(`[SAR] ⚠️ SAR generated but NOT saved to MongoDB (DB disconnected or no _id).`);
+    }
 
     return res.json({
       sarDraft: aiResult.sarDraft,

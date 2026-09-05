@@ -96,22 +96,23 @@ export default function EntitySidebar({ nodes = [], stats, resolvedUbo = '', act
                 <span style={{ fontSize: 10, color: '#C53030', fontWeight: 700, background: 'rgba(197,48,48,0.2)', padding: '1px 6px', borderRadius: 4 }}>FATAL</span>
               </div>
             ))}
-            {cumulativeVectors?.map(vec => {
-              // Known mapping for demo UI
-              const penaltyMap = { 
-                'LIQUIDATION_STATUS': '+30', 'ACCOUNTS_OVERDUE': '+20', 'CORPORATE_DIRECTOR': '+15',
-                'HIGH_OFFICER_TURNOVER': '+10', 'AGED_SHELL': '+35', 'VAGUE_SIC': '+15',
-                'BOILER_ROOM': '+40', 'SMURF_NETWORK': '+25' 
-              };
-              const score = penaltyMap[vec] || '+15';
+            {cumulativeVectors?.map((vec, i) => {
+              // vec can be a string OR an object {flag, impact, evidence}
+              const isObj  = vec && typeof vec === 'object'
+              const flag   = isObj ? (vec.flag || '') : String(vec)
+              const label  = flag.replace(/_/g, ' ')
+              const impact = isObj
+                ? (vec.impact != null ? `+${vec.impact}` : '+?')
+                : ({ LIQUIDATION_STATUS: '+30', ACCOUNTS_OVERDUE: '+20', CORPORATE_DIRECTOR: '+15',
+                     HIGH_OFFICER_TURNOVER: '+10', AGED_SHELL: '+35', VAGUE_SIC: '+15',
+                     BOILER_ROOM: '+40', SMURF_NETWORK: '+25' }[flag] || '+15')
               return (
-                <div key={vec} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 10, color: 'var(--text-dark)' }}>{vec.replace(/_/g, ' ')}</span>
-                  <span style={{ fontSize: 10, color: '#C05621', fontWeight: 700, background: 'rgba(221,107,32,0.15)', padding: '1px 6px', borderRadius: 4 }}>{score}</span>
+                <div key={flag + i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-dark)' }}>{label}</span>
+                  <span style={{ fontSize: 10, color: '#C05621', fontWeight: 700, background: 'rgba(221,107,32,0.15)', padding: '1px 6px', borderRadius: 4 }}>{impact}</span>
                 </div>
               )
-            }
-            )}
+            })}
           </div>
         </div>
       )}

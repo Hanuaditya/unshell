@@ -90,30 +90,37 @@ export default function RiskScoreboard({
       }}>
         {fatalFlags.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 5, overflowX: 'auto' }}>
-            {fatalFlags.map(f => (
-              <span key={f} style={{
-                background: 'rgba(197,48,48,0.15)', color: '#FC8181',
-                border: '1px solid rgba(197,48,48,0.3)',
-                fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
-                padding: '2px 9px', borderRadius: 9999, whiteSpace: 'nowrap', flexShrink: 0,
-              }}>
-                {f.replace(/_/g, ' ')}
-              </span>
-            ))}
+            {fatalFlags.map((f, i) => {
+              const flag = f && typeof f === 'object' ? (f.flag || '') : String(f)
+              return (
+                <span key={flag + i} style={{
+                  background: 'rgba(197,48,48,0.15)', color: '#FC8181',
+                  border: '1px solid rgba(197,48,48,0.3)',
+                  fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+                  padding: '2px 9px', borderRadius: 9999, whiteSpace: 'nowrap', flexShrink: 0,
+                }}>
+                  {flag.replace(/_/g, ' ')}
+                </span>
+              )
+            })}
           </div>
         )}
         {cumulativeVectors.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 5, overflowX: 'auto' }}>
-            {cumulativeVectors.map(v => (
-              <span key={v} style={{
-                background: 'var(--white)', color: 'var(--text-mid)',
-                border: '1px solid var(--border-light)',
-                fontSize: 9, fontWeight: 600, letterSpacing: '0.05em',
-                padding: '2px 9px', borderRadius: 9999, whiteSpace: 'nowrap', flexShrink: 0,
-              }}>
-                {v.replace(/_/g, ' ')}
-              </span>
-            ))}
+            {cumulativeVectors.map((v, i) => {
+              const flag   = v && typeof v === 'object' ? (v.flag || '') : String(v)
+              const impact = v && typeof v === 'object' && v.impact != null ? ` +${v.impact}` : ''
+              return (
+                <span key={flag + i} style={{
+                  background: 'var(--white)', color: 'var(--text-mid)',
+                  border: '1px solid var(--border-light)',
+                  fontSize: 9, fontWeight: 600, letterSpacing: '0.05em',
+                  padding: '2px 9px', borderRadius: 9999, whiteSpace: 'nowrap', flexShrink: 0,
+                }}>
+                  {flag.replace(/_/g, ' ')}{impact}
+                </span>
+              )
+            })}
           </div>
         )}
       </div>

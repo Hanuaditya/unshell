@@ -45,7 +45,6 @@ def _is_offshore(jurisdiction: str) -> bool:
 # ── Companies House API helpers ───────────────────────────────────────────────
 def fetch_uk_api(crn: str) -> dict:
     crn = crn.strip().upper()
-    print(f"\n[INVESTIGATE] Fetching Companies House data for CRN: {crn}\n")
     headers = _ch_headers()
 
     try:
@@ -81,7 +80,7 @@ def fetch_uk_api(crn: str) -> dict:
             "role": item.get("officer_role", ""),
             "appointment_date": item.get("appointed_on"),
             "resignation_date": item.get("resigned_on"),
-            "is_corporate": item.get("identification", {}).get("identification_type") == "registered-company",
+            "is_corporate": "corporate" in item.get("officer_role", "").lower() or item.get("identification", {}).get("identification_type") in ("registered-company", "uk-limited-company"),
         })
 
     pscs = []
@@ -189,7 +188,6 @@ def query_ofac(name: str) -> dict:
 
     db_path = os.path.join(os.path.dirname(__file__), "..", "data", "sanctions.db")
     if not os.path.exists(db_path):
-        print(f"[OFAC] WARNING: {db_path} not found. Returning safe.")
         return {"match": False, "detail": "No OFAC match found", "program": "", "matched_name": ""}
 
     words = name.split()
@@ -208,7 +206,7 @@ def query_ofac(name: str) -> dict:
                 if row:
                     return {"match": True, "detail": f"OFAC SDN partial match on '{word}': {dict(row).get('name')}", "program": dict(row).get("program", ""), "matched_name": dict(row).get("name", "")}
     except Exception as e:
-        print(f"[OFAC ERROR] {e}")
+        print(f"[OFAC] ERROR querying OFAC database: {e}")
     return {"match": False, "detail": "No OFAC match found", "program": "", "matched_name": ""}
 
 
@@ -221,7 +219,7 @@ def get_known_addresses() -> list[str]:
             cursor = db.execute("SELECT address_text FROM shell_addresses")
             return [r[0] for r in cursor.fetchall()]
     except Exception as e:
-        print(f"[ADDRESSES ERROR] {e}")
+        print(f"[ADDRESSES] ERROR querying known_addresses.db: {e}")
         return []
 
 
@@ -259,9 +257,6 @@ def fetch_uk_api_node(state: InvestigationState) -> InvestigationState:
     state["_charge_count"] = raw_data.get("charge_count", 0)
     state["_resigned_officer_count"] = raw_data.get("resigned_officer_count", 0)
 
-    offshore_count = sum(1 for psc in state["pscs"] if psc.get("is_offshore", False))
-    state["offshore_dead_end"] = offshore_count > 0
-
     # ── UBO Extraction ────────────────────────────────────────────────────────
     # PSCs are already sorted by ownership_pct descending from fetch_company_full
     pscs = state["pscs"]
@@ -269,28 +264,44 @@ def fetch_uk_api_node(state: InvestigationState) -> InvestigationState:
     if not pscs:
         state["resolved_ubo"] = "Unresolved — No PSC Registered (EDD Required)"
         state["_ubo_type"] = "unknown"
-    elif state["offshore_dead_end"]:
-        # Dominant offshore PSC
-        top_offshore = next((p for p in pscs if p.get("is_offshore", False)), pscs[0])
-        state["resolved_ubo"] = f"Unresolved — Offshore Entity: {top_offshore['name']}"
-        state["_ubo_type"] = "offshore"
     else:
-        # Find the individual with the HIGHEST ownership percentage
+        # Step 1: find the dominant individual PSC (any country — including non-UK residents)
+        # We only skip CORPORATE pscs that are offshore, not individuals who happen to live abroad
         individual_pscs = [
             p for p in pscs
-            if "individual" in p.get("type", "").lower()
-            and not p.get("is_offshore", False)
+            if "corporate" not in p.get("type", "").lower()
+            and "legal-person" not in p.get("type", "").lower()
         ]
+        corporate_pscs = [
+            p for p in pscs
+            if "corporate" in p.get("type", "").lower()
+            or "legal-person" in p.get("type", "").lower()
+        ]
+
         if individual_pscs:
-            # Already sorted descending — take first = highest ownership
+            # Found a human UBO directly — take the one with highest ownership
             top_individual = individual_pscs[0]
             state["resolved_ubo"] = top_individual["name"]
             state["_ubo_type"] = "individual"
+        elif corporate_pscs:
+            # All PSCs are corporate — check if any are offshore
+            offshore_corps = [p for p in corporate_pscs if p.get("is_offshore", False)]
+            if offshore_corps:
+                top_offshore = offshore_corps[0]
+                state["resolved_ubo"] = f"Unresolved — Offshore Entity: {top_offshore['name']}"
+                state["_ubo_type"] = "offshore"
+                state["offshore_dead_end"] = True
+            else:
+                # Domestic corporate PSC chain — flag for depth-2 expansion
+                top_corporate = corporate_pscs[0]
+                state["resolved_ubo"] = f"Unresolved — Corporate Chain: {top_corporate['name']} (EDD Required)"
+                state["_ubo_type"] = "corporate_chain"
         else:
-            # Corporate PSC chain — unresolved, needs EDD
-            top_corporate = pscs[0]  # highest % corporate PSC
-            state["resolved_ubo"] = f"Unresolved — Corporate Chain (EDD Required)"
-            state["_ubo_type"] = "corporate_chain"
+            state["resolved_ubo"] = "Unresolved — No PSC Registered (EDD Required)"
+            state["_ubo_type"] = "unknown"
+
+    offshore_count = sum(1 for psc in pscs if psc.get("is_offshore", False))
+    state["offshore_dead_end"] = state.get("offshore_dead_end", offshore_count > 0)
 
     return state
 
@@ -331,7 +342,6 @@ def _expand_corporate_psc_depth(state: InvestigationState) -> InvestigationState
             child_status = items[0].get("company_status", "")
             if not child_crn or child_status not in ("active", ""):
                 continue
-            print(f"[DEPTH-2] >> Expanding: {child_name} ({child_crn})")
             child_raw = fetch_company_full(child_crn)
             child_nodes, _, _ = parse_companies_house_data(child_raw)
             for node in child_nodes:
@@ -363,7 +373,28 @@ def _expand_corporate_psc_depth(state: InvestigationState) -> InvestigationState
 
     if new_depth_nodes > 0:
         print(f"[DEPTH-2] OK Added {new_depth_nodes} Level-2 nodes")
+
+    # ── Promote depth-2 individual as UBO if still unresolved ────────────────
+    # When the Level-1 PSC is a UK corporate chain, the actual human UBO
+    # (e.g. Nikolay Storonskiy for Revolut) appears at depth-2.
+    # Promote them so the frontend highlights the right person.
+    if state.get("_ubo_type") in ("corporate_chain", "unknown"):
+        depth2_individuals = [
+            n for n in state["discovered_nodes"]
+            if n.get("depth", 0) == 2
+            and n.get("type") == "individual"
+            and not n.get("is_target", False)
+        ]
+        if depth2_individuals:
+            # Pick the one with highest ownership_pct at depth-2
+            depth2_individuals.sort(key=lambda x: x.get("ownership_pct", 0), reverse=True)
+            ubo_candidate = depth2_individuals[0]
+            state["resolved_ubo"] = ubo_candidate["label"]
+            state["_ubo_type"] = "individual"
+            print(f"[DEPTH-2] UBO promoted from depth-2: {ubo_candidate['label']}")
+
     return state
+
 
 
 def _download_filings_multi(crn: str, categories: list) -> list[tuple[bytes, str]]:
@@ -676,7 +707,8 @@ def compile_output_node(state: InvestigationState) -> InvestigationState:
 
     try:
         cycles_len = len(list(nx.simple_cycles(graph))) if graph else 0
-    except:
+    except Exception as e:
+        print(f"[COMPILE] WARN nx.simple_cycles failed: {e}")
         cycles_len = 0
 
     # ── Final safety prune: remove any orphan nodes before sending to frontend ──
@@ -768,9 +800,10 @@ def cleanup_graph_node(state: InvestigationState) -> InvestigationState:
         print(f"[CLEANUP] [CLEAN] Removed {removed} floating/orphan nodes")
 
     # Tag the UBO node so the frontend can highlight it
+    # Only tag when UBO is truly resolved (i.e. not an "Unresolved — ..." string)
     resolved_ubo = state.get("resolved_ubo", "")
     ubo_name_clean = resolved_ubo.replace(" (PDF Verified)", "").lower().strip()
-    if ubo_name_clean:
+    if ubo_name_clean and not ubo_name_clean.startswith("unresolved"):
         for node in nodes:
             node_label_clean = node.get("label", "").lower().strip()
             # Match on word overlap (handles inverted CH names)
@@ -862,8 +895,6 @@ def run_investigation(crn: str) -> dict:
 
 def run_investigation_document(pdf_bytes: bytes, filename: str = "document.pdf") -> dict:
     """Document upload path — Gemini reads your own PDF."""
-    print(f"\n[DOCUMENT] Extracting ownership from: {filename}\n")
-
     extraction = extract_ownership_from_pdf(pdf_bytes)
     nodes, edges = convert_extraction_to_graph_format(extraction, document_name=filename)
 
@@ -910,7 +941,8 @@ def run_investigation_document(pdf_bytes: bytes, filename: str = "document.pdf")
 
     try:
         cycles_len = len(list(nx.simple_cycles(graph))) if graph else 0
-    except:
+    except Exception as e:
+        print(f"[DOCUMENT] WARN nx.simple_cycles failed: {e}")
         cycles_len = 0
 
     return {

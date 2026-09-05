@@ -165,27 +165,88 @@ def calculate_risk_score(
         score += 100
         fatal_flags.append("CIRCULAR_LOOP")
 
-    # ── 11. Nominee Puppet — pass-through entity (FATAL) ─────────────────────
-    # Only flags nodes with BOTH in-degree ≥ 1 AND out-degree ≥ 1 (genuine pass-throughs)
+    # ── 11. Nominee Puppet — refined AML rules ────────────────────────────────
+    #
+    # A legitimate UK holding company (in-degree ≥ 1, out-degree ≥ 1) is NOT
+    # a puppet. We only flag NOMINEE_PUPPET when there is concrete criminal
+    # evidence, using two internationally recognised red-flag patterns:
+    #
+    # Rule A — Mass-Appointment Individual:
+    #   A natural person holding >20 concurrent active directorships is a
+    #   classic nominee director (they cannot genuinely control that many firms).
+    #   Threshold: >20 active appointments.
+    #
+    # Rule B — Offshore Corporate Relay:
+    #   A corporate entity (company / trust) registered in a known high-risk
+    #   offshore jurisdiction that sits in the middle of the ownership chain
+    #   (in-degree ≥ 1 AND out-degree ≥ 1) is a pass-through vehicle.
+    #   UK→UK corporate chains are EXCLUDED (legitimate holding structures).
+    #
+    OFFSHORE_PUPPET_JURISDICTIONS = {
+        "cayman", "british virgin", "bvi", "bermuda", "panama", "seychelles",
+        "bahamas", "liechtenstein", "malta", "cyprus", "marshall islands",
+        "samoa", "vanuatu", "nauru", "anguilla", "turks and caicos",
+        "cook islands", "labuan", "mauritius", "maldives", "belize",
+        "delaware", "nevada", "wyoming", "guernsey", "jersey", "isle of man",
+        "luxembourg", "hong kong", "singapore", "dubai", "uae",
+    }
+    NOMINEE_DIRECTOR_THRESHOLD = 20  # >20 concurrent appointments = nominee
+
     puppet_nodes = []
+
     for node_id in graph.nodes():
-        if graph.in_degree(node_id) >= 1 and graph.out_degree(node_id) >= 1:
-            node_data = graph.nodes.get(node_id, {})
-            if node_data.get("type") in ("company", "trust"):
-                score += 75
-                fatal_flags.append("NOMINEE_PUPPET")
-                puppet_nodes.append(node_id)
-                
-                # Tag it for the frontend
-                for n in nodes:
-                    if n["id"] == node_id:
-                        if "tags" not in n: n["tags"] = []
-                        if "NOMINEE_PUPPET" not in n["tags"]:
-                            n["tags"].append("NOMINEE_PUPPET")
-                        break
-                break
+        node_data = graph.nodes.get(node_id, {})
+        node_type  = node_data.get("type", "")
+        juris      = (node_data.get("jurisdiction") or "").lower()
+        is_target  = node_data.get("is_target", False)
+        apt_count  = node_data.get("appointment_count", 0) or 0
+
+        if is_target:
+            continue  # never flag the target company itself
+
+        flagged = False
+
+        # Rule A: mass-appointment individual
+        if node_type == "individual" and apt_count > NOMINEE_DIRECTOR_THRESHOLD:
+            print(f"[PUPPET] Rule A triggered: {node_data.get('label')} has {apt_count} appointments")
+            flagged = True
+
+        # Rule B: offshore corporate relay (only if it is a pass-through in the chain)
+        if not flagged and node_type in ("company", "trust"):
+            is_in_chain = (
+                graph.in_degree(node_id) >= 1 and graph.out_degree(node_id) >= 1
+            )
+            is_offshore_juris = any(kw in juris for kw in OFFSHORE_PUPPET_JURISDICTIONS)
+            if is_in_chain and is_offshore_juris:
+                print(f"[PUPPET] Rule B triggered: {node_data.get('label')} is offshore pass-through ({juris})")
+                flagged = True
+
+        if flagged and "NOMINEE_PUPPET" not in fatal_flags:
+            score += 75
+            fatal_flags.append("NOMINEE_PUPPET")
+            puppet_nodes.append(node_id)
+            # Tag the node for the frontend
+            for n in nodes:
+                if n["id"] == node_id:
+                    if "tags" not in n:
+                        n["tags"] = []
+                    if "NOMINEE_PUPPET" not in n["tags"]:
+                        n["tags"].append("NOMINEE_PUPPET")
+                    break
+
+    # ── 12. Offshore Corporate PSC wall (non-fatal but raises score) ──────────
+    # Separate from NOMINEE_PUPPET — any offshore corporate PSC adds risk even
+    # if it is not a pass-through (could be a terminal offshore wall).
+    offshore_corporate_pscs = [
+        p for p in pscs
+        if p.get("is_offshore", False) and "corporate" in p.get("type", "").lower()
+    ]
+    if offshore_corporate_pscs and "OFFSHORE_WALL" not in cumulative_vectors:
+        score += 30
+        cumulative_vectors.append("OFFSHORE_WALL")
 
     return min(score, 100), fatal_flags, cumulative_vectors
+
 
 
 def get_risk_label(score: int) -> str:

@@ -314,6 +314,7 @@ def parse_companies_house_data(raw: dict) -> tuple[list[dict], list[dict], list[
             "sic_codes": [],
             "role": role_label,
             "appointment_date": o.get("appointment_date"),
+            "appointment_count": o.get("appointment_count", 0),
             "tags": ["CORPORATE_DIRECTOR"] if o.get("is_corporate") and role_label.lower() in ("director", "nominee director") else [],
         })
 

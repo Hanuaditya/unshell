@@ -55,7 +55,7 @@ def _safe_get(url: str, headers: dict, params: dict = None) -> Optional[dict]:
     try:
         r = requests.get(url, headers=headers, params=params or {}, timeout=12)
         return r.json() if r.status_code == 200 else None
-    except Exception:
+    except Exception as e:
         return None
 
 
@@ -66,7 +66,6 @@ def fetch_company_full(crn: str) -> dict:
     """
     crn = crn.strip().upper()
     h = _ch_headers()
-    print(f"\n[CH] Fetching full profile for CRN: {crn}")
 
     # ── Core endpoints ────────────────────────────────────────────────────────
     profile     = _safe_get(f"{CH_BASE}/company/{crn}", h)
@@ -123,14 +122,27 @@ def fetch_company_full(crn: str) -> dict:
         if item.get("resigned_on"):
             resigned_count += 1
             continue
+        # Fetch this officer's total active appointment count from CH
+        officer_links = item.get("links", {})
+        officer_self  = officer_links.get("officer", {}).get("appointments", "")
+        appointment_count = 0
+        if officer_self:
+            try:
+                apt_url = f"https://api.company-information.service.gov.uk{officer_self}"
+                apt_r   = _safe_get(apt_url, h)
+                if apt_r:
+                    appointment_count = apt_r.get("active_count", apt_r.get("total_results", 0))
+            except Exception as e:
+                pass
         active_officers.append({
             "name": item.get("name", "").strip(),
             "role": item.get("officer_role", ""),
             "appointment_date": item.get("appointed_on"),
             "resignation_date": None,
-            "is_corporate": item.get("identification", {}).get("identification_type") == "registered-company",
+            "is_corporate": "corporate" in item.get("officer_role", "").lower() or item.get("identification", {}).get("identification_type") in ("registered-company", "uk-limited-company"),
             "nationality": item.get("nationality", ""),
             "country_of_residence": item.get("country_of_residence", ""),
+            "appointment_count": appointment_count,
         })
 
     # ── Filing history analysis ───────────────────────────────────────────────
@@ -178,8 +190,6 @@ def fetch_company_full(crn: str) -> dict:
     company_status = profile.get("company_status", "active")
     has_insolvency = bool(profile.get("has_insolvency_history", False))
     has_charges = len(charges) > 0
-
-    print(f"[CH] {profile.get('company_name')} | PSCs: {len(pscs)} | Officers: {len(active_officers)} | Filings: {total_filings} | Dormant: {is_dormant}")
 
     return {
         # Core identity

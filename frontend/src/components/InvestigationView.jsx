@@ -20,7 +20,9 @@ export default function InvestigationView({ data, crn = '', onReset = () => { },
 
   const fileInputRef = useRef(null)
 
-  const targetName = data.graph?.nodes?.[0]?.label || data.resolved_ubo || 'Investigation'
+  const graphNodes = data?.graph?.nodes || []
+  const graphEdges = data?.graph?.edges || []
+  const targetName = graphNodes[0]?.label || data?.resolved_ubo || data?.company_name || 'Investigation'
   const panelWidth = selectedEdge ? 300 : 0
 
   const handleGenerateSar = async () => {
@@ -201,31 +203,48 @@ export default function InvestigationView({ data, crn = '', onReset = () => { },
         overflow: 'hidden',
       }}>
         <EntitySidebar
-          nodes={data.graph.nodes}
-          stats={data.stats}
-          fatalFlags={data.fatal_flags}
-          cumulativeVectors={data.cumulative_vectors}
-          resolvedUbo={data.resolved_ubo}
+          nodes={graphNodes}
+          stats={data?.stats}
+          fatalFlags={data?.fatal_flags}
+          cumulativeVectors={data?.cumulative_vectors}
+          resolvedUbo={data?.resolved_ubo}
           activeFilters={activeFilters}
           onFilterChange={setActiveFilters}
           onEntityClick={id => setSelectedNodeId(id)}
         />
 
-        <GraphCanvas
-          nodes={data.graph.nodes}
-          edges={data.graph.edges}
-          activeFilters={activeFilters}
-          focusNodeId={selectedNodeId}
-          onEdgeClick={edge => setSelectedEdge(edge)}
-          onPaneClick={() => setSelectedEdge(null)}
-        />
+        {graphNodes.length === 0 ? (
+          <div style={{
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            height: '100%',
+            background: 'var(--cream)',
+            gap: 12,
+          }}>
+            <div style={{ fontSize: 32 }}>📭</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-dark)' }}>No Graph Data</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 340, textAlign: 'center', lineHeight: 1.6 }}>
+              The investigation completed but returned no ownership graph nodes.
+              This may be because the company has no PSC or officer data registered.
+            </div>
+          </div>
+        ) : (
+          <GraphCanvas
+            nodes={graphNodes}
+            edges={graphEdges}
+            activeFilters={activeFilters}
+            focusNodeId={selectedNodeId}
+            onEdgeClick={edge => setSelectedEdge(edge)}
+            onPaneClick={() => setSelectedEdge(null)}
+          />
+        )}
 
         <div style={{ overflow: 'hidden' }}>
           {selectedEdge && (
             <EvidencePanel
               edge={selectedEdge}
-              nodes={data.graph.nodes}
-              stats={data.stats}
+              nodes={graphNodes}
+              stats={data?.stats}
               onClose={() => setSelectedEdge(null)}
             />
           )}
@@ -234,14 +253,14 @@ export default function InvestigationView({ data, crn = '', onReset = () => { },
 
       {/* ── Bottom scoreboard ────────────────────────────────────────────────── */}
       <RiskScoreboard
-        riskScore={data.risk_score}
-        riskLabel={data.risk_label}
-        fatalFlags={data.fatal_flags}
-        cumulativeVectors={data.cumulative_vectors}
-        confidence={null} /* hidden for now: data.confidence_score */
-        sanctionsHit={data.sanctions_hit}
-        sanctionsDetail={data.sanctions_detail}
-        resolvedUbo={data.resolved_ubo}
+        riskScore={data?.risk_score}
+        riskLabel={data?.risk_label}
+        fatalFlags={data?.fatal_flags}
+        cumulativeVectors={data?.cumulative_vectors}
+        confidence={null}
+        sanctionsHit={data?.sanctions_hit}
+        sanctionsDetail={data?.sanctions_detail}
+        resolvedUbo={data?.resolved_ubo}
         onGenerateSar={handleGenerateSar}
       />
 

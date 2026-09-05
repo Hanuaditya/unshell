@@ -68,7 +68,7 @@ function Logo({ size = 'md' }) {
 }
 
 /* ─── Error Modal ────────────────────────────────────────────────────── */
-function ErrorModal({ message, onClose }) {
+function ErrorModal({ title = 'Error', message, onClose }) {
   if (!message) return null
   return (
     <div onClick={onClose} style={{
@@ -82,7 +82,7 @@ function ErrorModal({ message, onClose }) {
         boxShadow: '0 24px 64px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.05)',
         textAlign: 'center',
       }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, marginBottom: 8 }}>Invalid CRN</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, marginBottom: 8 }}>{title}</div>
         <div style={{ fontSize: 13, color: C.inkMuted, lineHeight: 1.65, marginBottom: 24 }}>{message}</div>
         <button onClick={onClose} style={{
           background: C.ink, color: '#fff', border: 'none', borderRadius: 99,
@@ -97,15 +97,18 @@ function ErrorModal({ message, onClose }) {
 export default function DualEntryGateway({ onInvestigateAPI, error, onErrorClear }) {
   const [crn, setCrn]         = useState('')
   const [modalErr, setMErr]   = useState(null)
+  const [modalTitle, setMTitle] = useState('Invalid CRN')
   const [focused, setFocused] = useState(false)
 
   const displayError = modalErr || error
+  const displayTitle = (error && !modalErr) ? 'Investigation Error' : modalTitle
   const canGo = crn.trim().length > 0
 
   function go(val) {
     const t = (val ?? crn).trim().toUpperCase()
     if (!t) return
     if (!CRN_REGEX.test(t)) {
+      setMTitle('Invalid CRN')
       setMErr(`"${t}" is not a valid UK CRN. Expected 8 digits (e.g. 09446231) or 2-letter prefix + 6 digits (e.g. SC123456).`)
       return
     }
@@ -131,9 +134,11 @@ export default function DualEntryGateway({ onInvestigateAPI, error, onErrorClear
       `}</style>
 
       <ErrorModal 
+        title={displayTitle}
         message={displayError} 
         onClose={() => {
           setMErr(null)
+          setMTitle('Invalid CRN')
           if (onErrorClear) onErrorClear()
         }} 
       />
