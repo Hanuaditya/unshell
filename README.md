@@ -20,6 +20,12 @@
 
 ---
 
+## 🎥 Demo Video (5 min)
+
+[![Project Unshell Demo](https://img.youtube.com/vi/iBJjzfc9T_4/0.jpg)](https://youtu.be/iBJjzfc9T_4)
+
+---
+
 ## What is Project Unshell?
 
 Financial criminals don't walk through the front door. They hide behind **layers of shell companies, nominee directors, and offshore trusts** — making it nearly impossible for a compliance analyst to trace the real beneficial owner.
