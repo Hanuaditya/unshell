@@ -4,6 +4,7 @@ import EvidencePanel from './EvidencePanel'
 import RiskScoreboard from './RiskScoreboard'
 import EntitySidebar from './EntitySidebar'
 import SarDraftModal from './SarDraftModal'
+import AopPolicyModal from './AopPolicyModal'
 import { generateSar } from '../api/client'
 
 // ─── MOCK DATA (removed) ──────────────────────────────────────────────────────
@@ -17,6 +18,7 @@ export default function InvestigationView({ data, crn = '', onReset = () => { },
   const [sarDraft, setSarDraft] = useState(null)
   const [sarLoading, setSarLoading] = useState(false)
   const [sarError, setSarError] = useState(null)
+  const [isAopModalOpen, setIsAopModalOpen] = useState(false)
 
   const fileInputRef = useRef(null)
 
@@ -113,6 +115,42 @@ export default function InvestigationView({ data, crn = '', onReset = () => { },
 
         {/* Divider */}
         <div style={{ width: 1, height: 18, background: 'var(--border-light)', margin: '0 16px' }} />
+
+        <button
+          onClick={() => setIsAopModalOpen(true)}
+          style={{
+            background: 'linear-gradient(135deg, #4F46E5 0%, #4338CA 100%)',
+            border: '1px solid rgba(99, 102, 241, 0.4)',
+            color: '#FFFFFF',
+            fontSize: 12,
+            fontWeight: 600,
+            padding: '6px 14px',
+            borderRadius: 9999,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            transition: 'all 0.18s ease',
+            letterSpacing: '0.01em',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)',
+            whiteSpace: 'nowrap',
+            marginRight: 10,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-1px)'
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(79, 70, 229, 0.35)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'none'
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(79, 70, 229, 0.25)'
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          <span>AOP Policy & Backtest</span>
+        </button>
 
         {/* CTA */}
         <button
@@ -272,6 +310,13 @@ export default function InvestigationView({ data, crn = '', onReset = () => { },
         crn={crn}
         loading={sarLoading}
         error={sarError}
+      />
+
+      <AopPolicyModal
+        isOpen={isAopModalOpen}
+        onClose={() => setIsAopModalOpen(false)}
+        currentCompany={targetName || 'SATUS 2026-1 PLC'}
+        currentScore={data?.risk_score ?? 90}
       />
     </div>
   )

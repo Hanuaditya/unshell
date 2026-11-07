@@ -25,14 +25,10 @@ connectDB();
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 
-// CORS — allow the Vite dev server and any localhost variant
+// CORS — allow frontend from any origin (Vercel, localhost, etc.)
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "http://127.0.0.1:5173",
-    ],
+    origin: true,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -76,7 +72,7 @@ app.use((err, req, res, _next) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`🚀  Node middleware running on http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Node backend running on port ${PORT}`);
   console.log(`🤖  AI service proxy → ${process.env.AI_SERVICE_URL || "http://localhost:8001"}`);
 });
